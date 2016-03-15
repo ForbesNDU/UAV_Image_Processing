@@ -4,10 +4,10 @@
 // Date: 11/20/2015
 
 #include <stdio.h>
-#include <limits.h>
 #include <string.h>
-#include <windows.h>
-#include <winhttp.h>
+#include <sys/time.h>
+#include <unistd.h>
+
 #include "opencv/cv.h"
 #include "opencv/highgui.h"
 
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 	cvRectangle(gt_resized, corner1, corner2, rect_color, 2);
 
 	cvNamedWindow( "Ground Truth Reference", CV_WINDOW_AUTOSIZE );
-    cvShowImage( "Ground Truth Reference", gt_resized );
+	cvShowImage( "Ground Truth Reference", gt_resized );
 
 	// Set ROI for ground truth
 	CvRect quarter = cvRect(gt_rect[0], gt_rect[1], gt_rect[2], gt_rect[3]);
@@ -75,74 +75,37 @@ int main(int argc, char **argv) {
 
 	////////// PREPARE GOPRO FOR VIDEO CAPTURE //////////
 
-	// Basic connectivity tests
-	HINTERNET hSession = WinHttpOpen( L"GoPro HTTP Transfer/1.1", 
-                              WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                              WINHTTP_NO_PROXY_NAME, 
-                              WINHTTP_NO_PROXY_BYPASS, 0 ); 
-
-	if(hSession == NULL) {
-		printf("Error %u in WinHttpOpen.\n", GetLastError());
-		std::cin.get();
-		return 1;
-	}
-
-	if( !WinHttpSetTimeouts( hSession, 10000, 10000, 10000, 10000 )) {
-		printf( "Error %u in WinHttpSetTimeouts.\n", GetLastError());
-		std::cin.get();
-		return 1;
-	}
-
-	HINTERNET hConnect = WinHttpConnect( hSession, L"10.5.5.9", 80, 0);
-
-	if(hConnect == NULL) {
-		printf("Error %u in WinHttpConnect.\n", GetLastError());
-		std::cin.get();
-		return 1;
-	}
-	
 	// Power on
-	bool error = ping_request(hConnect, L"/bacpac/PW?t=goprohero&p=%01");
+	bool error = ping_url("http://10.5.5.9/bacpac/PW?t=goprohero&p=%01");
 	if(error) {
 		return 1;
 	}
-
-	Sleep(5000); //give time to boot up
+	sleep(5); //give time to boot up
 
 	//Clear memory
-
-	error = ping_request(hConnect, L"/camera/DA?t=goprohero");
+	error = ping_url("http://10.5.5.9/camera/DA?t=goprohero");
 	if(error) {
 		return 1;
 	}
-
-	Sleep(5000); //give time to delete files
+	sleep(5); //give time to delete files
 
 	// Set to video mode
-	error = ping_request(hConnect, L"/camera/CM?t=goprohero&p=%00");
+	error = ping_url("http://10.5.5.9/camera/CM?t=goprohero&p=%00");
 	if(error) {
 		return 1;
 	}
-
-	Sleep(1000);
+	sleep(1);
 
 	// Set video resolution to 720p, 30FPS
-	error = ping_request(hConnect, L"/camera/VR?t=goprohero&p=%00");
+	error = ping_url("http://10.5.5.9/camera/VR?t=goprohero&p=%00");
 	if(error) {
 		return 1;
 	}
-
-	Sleep(1000);
-
-	WinHttpCloseHandle(hConnect);
-	WinHttpCloseHandle(hSession);
+	sleep(1);
 
 	////////// PREPARE TIMING & VIDEO RESOURCES //////////
 
 	// Prepare timing instrumentation (for FPS control)
-	__int64 last_time = 0;
-	__int64 current_time = 0;
-	__int64 freq = 0;
 	int frame_time = 1000 / desired_fps;
 
 	// Play video
@@ -152,13 +115,14 @@ int main(int argc, char **argv) {
 
 	// Record annotated video
 	CvSize write_size = cvSize(
-       (int)cvGetCaptureProperty( track_video, CV_CAP_PROP_FRAME_WIDTH),
-       (int)cvGetCaptureProperty( track_video, CV_CAP_PROP_FRAME_HEIGHT)
-    );	
+       		(int)cvGetCaptureProperty( track_video, CV_CAP_PROP_FRAME_WIDTH),
+       		(int)cvGetCaptureProperty( track_video, CV_CAP_PROP_FRAME_HEIGHT)
+    	);	
 	CvVideoWriter *writer = cvCreateVideoWriter( "output.avi", CV_FOURCC('M','J','P','G'), 20, write_size, 1);
 
 	// Start timer
-	QueryPerformanceCounter((LARGE_INTEGER*) &last_time);
+	struct timeval start, current;
+	gettimeofday(&start, 0);
 
 	////////// MAIN PROCESSING LOOP //////////
 
@@ -223,10 +187,11 @@ int main(int argc, char **argv) {
 		cvWriteFrame( writer, current_frame );
 
 		// FPS Control
-		QueryPerformanceCounter((LARGE_INTEGER*) &current_time);
-		QueryPerformanceFrequency((LARGE_INTEGER*) &freq);
 
-		int elapsed_time = (int)((current_time - last_time) / freq);
+		gettimeofday(&current, 0);
+		
+
+		int elapsed_time = ((current.tv_sec - start.tv_sec) * 1000000) + (current.tv_usec - start.tv_usec);
 		int wait_time = frame_time - (elapsed_time / 1000);
 
 		if(wait_time < 0) {

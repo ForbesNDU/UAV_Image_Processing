@@ -1,30 +1,27 @@
 #include "web_utils.h"
 
 // Send request to GoPro
-bool ping_request(HINTERNET hConnect, LPCWSTR request) {
-		HINTERNET hRequest = WinHttpOpenRequest( hConnect, L"GET", 
-											 request, 
-                                             NULL, WINHTTP_NO_REFERER, 
-                                             WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                             0);
+bool ping_url(std::string url) {
 
-	if(hRequest == NULL) {
-		printf("Error %u in WinHttpOpenRequest\n", GetLastError());
-		std::cin.get();
-		return true;
+	CURL *curl;
+	CURLcode res;
+
+	curl = curl_easy_init();
+	
+	if(curl) {
+		curl_easy_setopt( curl, CURLOPT_URL, url.c_str() );
+		res = curl_easy_perform( curl );
+
+		if(res != CURLE_OK) {
+			std::cout << "An error occurred processing a curl request: " << curl_easy_strerror(res) << std::endl;
+			return false;
+		}
+
+		curl_easy_cleanup(curl);
+	} 
+	else {
+		std::cout << "Failed to initialize CURL" << std::endl;
+		return false;
 	}
 
-    bool bResults = WinHttpSendRequest( hRequest, 
-                                        WINHTTP_NO_ADDITIONAL_HEADERS,
-                                        0, WINHTTP_NO_REQUEST_DATA, 0, 
-                                        0, 0);
-
-	if (!bResults) {
-		printf( "Error %u in WinHttpSendRequest\n", GetLastError());
-		std::cin.get();
-		return true;
-	}
-	WinHttpCloseHandle(hRequest);
-
-	return false;
 }

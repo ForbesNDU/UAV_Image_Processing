@@ -6,7 +6,7 @@ CC = g++
 MAIN_DEPS = img_proc.h web_utils.h
 MAIN_OBJS = img_proc.o web_utils.o
 EXTRA_FLAGS = -Wpedantic -Wall -g -std=c++11
-LIBS = -L/usr/lib
+LIBS = -L/usr/lib -L/usr/local/lib -lcurl
 
 
 ######## MAIN BUILD RULES ########
